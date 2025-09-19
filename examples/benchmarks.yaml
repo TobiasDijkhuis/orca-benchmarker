@@ -1,0 +1,35 @@
+# Same list as J. Enrique-Romero et al, 2025. https://doi.org/10.1051/0004-6361/202555360 
+# https://www.aanda.org/articles/aa/pdf/2025/07/aa55360-25.pdf
+# Along with testing more dispersion corrections
+
+# Configuration
+config:
+  BasisCC: cc-pVTZ-F12 cc-pVTZ-F12-CABS cc-pVQZ/C
+  Reference: CCSD(T)-F12/RI
+  BasisDFT: Def2-TZVP
+  Grid: DEFGRID3
+  orcablocks:
+    - pal nprocs 8 end
+    - "scf\n  convergence Tight \n  guess PModel\nend"
+    - output PrintLevel small end
+  Parameters:
+    - energy
+# Functionals to test
+Benchmarks:
+  - B3LYP
+  - B3LYP D3
+  - B3LYP D4
+  - BHANDHLYP
+  - BHANDHLYP D3
+  - BHANDHLYP D4
+  - M062X D3ZERO
+  # - MPWB1K D3BJ6.5 # Not sure whether this is in ORCA
+  # - M08HX D3 # Is in ORCA, but needs to be input in ORCAblocks, as hyb_c_mgga_m08... Run "orca -libxcfunctionals | grep "M08""
+  # - LibXC(M052X) D3
+  - PW6B95 D4
+  - RSCAN D3BJ
+  - wB97M-D3BJ
+  - wB97M-V
+  - wB97X D4
+
+

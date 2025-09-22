@@ -98,4 +98,18 @@ def safe_calculate(
         print(f"\t\tInspect output file {output_path}")
         duration, energy, forces = None, None, None
         completed = False
-    return Result(completed, duration, energy, forces)
+    return Result(
+        completed=completed,
+        filepath=output_path,
+        duration=duration,
+        energy=energy,
+        forces=forces,
+    )
+
+
+def replace_brackets_parenthesis_by_lowercase(string: str) -> str:
+    return re.sub(
+        r"[(][A-Z]+[)]",
+        lambda m: m.group(0).replace("(", "").replace(")", "").lower(),
+        string,
+    )

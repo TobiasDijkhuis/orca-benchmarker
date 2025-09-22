@@ -10,6 +10,7 @@ from dataclasses import dataclass
 @dataclass
 class Result:
     completed: bool
+    filepath: str | Path
     duration: float | None
     energy: float | None
     forces: np.ndarray | None
@@ -35,4 +36,10 @@ class Result:
             completed = False
             energy, forces, duration = None, None, None
 
-        return cls(completed, duration, energy, forces)
+        return cls(
+            completed=completed,
+            filepath=filepath,
+            duration=duration,
+            energy=energy,
+            forces=forces,
+        )

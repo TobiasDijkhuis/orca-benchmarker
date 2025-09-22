@@ -18,7 +18,13 @@ from shutil import copyfile
 from time import sleep
 import re
 
-from .utils import get_job_state, wait_until_job_done, safe_calculate, slurm_calculator
+from .utils import (
+    get_job_state,
+    wait_until_job_done,
+    safe_calculate,
+    slurm_calculator,
+    replace_brackets_parenthesis_by_lowercase,
+)
 from .result import Result
 
 _implement_child_string = "To be implemented by child class"
@@ -107,7 +113,7 @@ class BenchmarkORCA:
         return self.config["reference"]
 
     def reference_is_set(self) -> bool:
-        return "reference" in self.config.keys()
+        return "reference" in self.config
 
     def get_config(self) -> dict:
         return self.config
@@ -122,7 +128,7 @@ class BenchmarkORCA:
             orcablocks = [orcablocks]
         if orcablocks is None:
             orcablocks = []
-        if "orcablocks" in self.config.keys():
+        if "orcablocks" in self.config:
             if self.config["orcablocks"] == "":
                 return ""
             if isinstance(self.config["orcablocks"], str):
@@ -160,12 +166,9 @@ class BenchmarkORCA:
             benchmark_dir = Path(directory) / benchmark.replace(" ", "_").replace(
                 "/", ""
             )
+
             benchmark_dir = Path(
-                re.sub(
-                    r"[(][A-Z]+[)]",
-                    lambda m: m.group(0).replace("(", "").replace(")", "").lower(),
-                    str(benchmark_dir),
-                )
+                replace_brackets_parenthesis_by_lowercase(str(benchmark_dir))
             )
 
             calculator = ORCA(
@@ -193,11 +196,8 @@ class BenchmarkORCA:
         rel_path = "reference_" + self.config["reference"].replace(" ", "_").replace(
             "/", ""
         )
-        rel_path = re.sub(
-            r"[(][A-Z]+[)]",
-            lambda m: m.group(0).replace("(", "").replace(")", "").lower(),
-            rel_path,
-        )
+
+        rel_path = Path(replace_brackets_parenthesis_by_lowercase(rel_path))
 
         orcablocks = self.get_total_orcablocks(orcablocks, use_slurm=use_slurm)
         reference_dir = Path(directory) / rel_path

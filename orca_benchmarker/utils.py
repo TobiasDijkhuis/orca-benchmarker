@@ -115,9 +115,18 @@ def replace_brackets_parenthesis_by_lowercase(string: str) -> str:
     )
 
 
+def remove_libxc_from_string(string: str) -> str:
+    return re.sub(
+        r"LibXC[(][a-zA-Z0-9]+[)]",
+        lambda m: m.group(0).replace("LibXC(", "").replace(")", ""),
+        string,
+    )
+
+
 def convert_benchmark_to_dir(benchmark: str, reference=False) -> Path:
     """Converts the benchmark string to a valid directory"""
     benchmark_dir = benchmark.replace(" ", "_").replace("/", "")
+    benchmark_dir = remove_libxc_from_string(benchmark_dir)
     benchmark_dir = replace_brackets_parenthesis_by_lowercase(str(benchmark_dir))
     if reference:
         return Path("reference_" + benchmark_dir)

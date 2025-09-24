@@ -39,7 +39,7 @@ class Result:
 
         return cls(
             completed=completed,
-            filepath=filepath,
+            filepath=Path(filepath),
             duration=duration,
             energy=energy,
             forces=forces,

@@ -18,9 +18,14 @@ from ase.io import ParseError, read
 from ase.io.orca import read_orca_output
 
 from .result import Result
-from .utils import (convert_benchmark_to_dir, get_job_state,
-                    replace_brackets_parenthesis_by_lowercase, safe_calculate,
-                    slurm_calculator, wait_until_job_done)
+from .utils import (
+    convert_benchmark_to_dir,
+    get_job_state,
+    replace_brackets_parenthesis_by_lowercase,
+    safe_calculate,
+    slurm_calculator,
+    wait_until_job_done,
+)
 
 _implement_child_string = "To be implemented by child class"
 
@@ -270,7 +275,9 @@ class BenchmarkORCA:
         except (ImportError, ModuleNotFoundError):
             [wait_until_job_done(job_id) for job_id in jobs]
 
-    def read_results(self, directory: str | Path = ".") -> tuple[list[Result], Result]:
+    def read_results(
+        self, directory: str | Path = "."
+    ) -> tuple[list[Result], Result | None]:
         """Get all results"""
         benchmark_results = []
         for benchmark_dir in self.benchmark_dirs:
@@ -279,6 +286,9 @@ class BenchmarkORCA:
                     Path(directory) / benchmark_dir / "orca.out"
                 )
             )
+
+        if not self.reference_is_set():
+            return benchmark_results, None
 
         reference_result = Result.from_orca_output_file(
             Path(directory) / self.reference_dir / "orca.out"
@@ -302,88 +312,3 @@ class BenchmarkORCA:
             energy - self.reference_energy if energy is not None else None
             for energy in self.energies
         ]
-
-
-class BenchmarkFunctionals(BenchmarkORCA):
-    valid_configuration_keys = [
-        "basisdft",
-        "basiscc",
-        "reference",
-        "orcablocks",
-        "grid",
-        "parameters",
-    ]
-
-    def __init__(self, benchmarks, config):
-        super().__init__(
-            benchmarks,
-            config,
-            BenchmarkFunctionals.valid_configuration_keys,
-        )
-        self._add_basis_sets()
-
-    @classmethod
-    def from_BenchmarkORCA(
-        cls, benchmark_orca_instance: BenchmarkORCA
-    ) -> BenchmarkFunctionals:
-        benchmarks = benchmark_orca_instance.benchmarks
-        config = benchmark_orca_instance.config
-        return cls(benchmarks, config)
-
-    @classmethod
-    def from_file(
-        cls, filepath: Union[str, Path], comment: str = "#"
-    ) -> BenchmarkFunctionals:
-        benchmark_orca_instance = BenchmarkORCA.from_file(
-            filepath,
-            BenchmarkFunctionals.valid_configuration_keys,
-            comment=comment,
-        )
-        return cls.from_BenchmarkORCA(benchmark_orca_instance)
-
-    @classmethod
-    def from_yaml(cls, filepath: str | Path) -> BenchmarkFunctionals:
-        benchmark_orca_instance = BenchmarkORCA.from_yaml(
-            filepath, BenchmarkFunctionals.valid_configuration_keys
-        )
-        return cls.from_BenchmarkORCA(benchmark_orca_instance)
-
-    def get_ase_simpleinputs(
-        self,
-        benchmarks: list[str] | str,
-    ) -> list[str]:
-        if isinstance(benchmarks, list):
-            return [self.get_ase_simpleinputs(benchmark) for benchmark in benchmarks]
-        elif isinstance(benchmarks, str):
-            simpleinput = benchmarks
-            if "grid" in self.config:
-                simpleinput += " " + self.config["grid"]
-            if (
-                "forces" in self.config["parameters"]
-                and "energy" in self.config["parameters"]
-            ):
-                simpleinput += " EnGrad"
-                if "cc" in benchmarks.lower():
-                    # No analytical gradients for CC calculations
-                    simpleinput += " NumGrad"
-            elif "energy" in self.config["parameters"]:
-                simpleinput += " Energy"
-            else:
-                raise ValueError(self.config["parameters"])
-            return simpleinput
-        else:
-            raise ValueError()
-
-    def _add_basis_sets(self) -> None:
-        for i, functional in enumerate(self.benchmarks):
-            if "cc" in functional.lower():
-                # coupled cluster
-                self.benchmarks[i] += " " + self.config["basiscc"]
-            else:
-                self.benchmarks[i] += " " + self.config["basisdft"]
-
-        if "cc" in self.config["reference"].lower():
-            # coupled cluster
-            self.config["reference"] += " " + self.config["basiscc"]
-        else:
-            self.config["reference"] += " " + self.config["basisdft"]

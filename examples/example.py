@@ -4,12 +4,12 @@ from pathlib import Path
 from ase.calculators.orca import OrcaProfile
 from ase.io import read
 
-from orca_benchmarker.benchmark_parser import BenchmarkFunctionals
+from orca_benchmarker.benchmark_functionals import BenchmarkFunctionals
 
 if __name__ == "__main__":
     trimer_benchmarks = BenchmarkFunctionals.from_yaml("benchmarks.yaml")
 
-    use_slurm = True
+    use_slurm = False
     slurm_script_path = "calc.sh"
 
     trimer_path = Path(os.path.dirname(__file__)) / "optimization.traj"

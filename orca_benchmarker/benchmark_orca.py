@@ -2,30 +2,15 @@ from __future__ import annotations
 
 import os
 import re
-from copy import deepcopy
 from pathlib import Path
-from shutil import copyfile
-from subprocess import CalledProcessError, run
-from time import perf_counter, sleep
-from typing import Optional, Union
 
-import ase.units as units
 import yaml
 from ase.atoms import Atoms
-from ase.calculators.calculator import PropertyNotImplementedError
 from ase.calculators.orca import ORCA, OrcaProfile
-from ase.io import ParseError, read
-from ase.io.orca import read_orca_output
 
 from .result import Result
-from .utils import (
-    convert_benchmark_to_dir,
-    get_job_state,
-    replace_brackets_parenthesis_by_lowercase,
-    safe_calculate,
-    slurm_calculator,
-    wait_until_job_done,
-)
+from .utils import (convert_benchmark_to_dir, safe_calculate,
+                    wait_until_job_done)
 
 _implement_child_string = "To be implemented by child class"
 

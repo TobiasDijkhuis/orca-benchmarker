@@ -13,7 +13,7 @@ class BenchmarkFunctionals(BenchmarkORCA):
         "parameters",
     ]
 
-    def __init__(self, benchmarks, config):
+    def __init__(self, benchmarks: list[str], config: dict):
         super().__init__(
             benchmarks,
             config,
@@ -50,7 +50,7 @@ class BenchmarkFunctionals(BenchmarkORCA):
     def get_ase_simpleinputs(
         self,
         benchmarks: list[str] | str,
-    ) -> list[str]:
+    ) -> list[str] | str:
         if isinstance(benchmarks, list):
             return [self.get_ase_simpleinputs(benchmark) for benchmark in benchmarks]
         elif isinstance(benchmarks, str):

@@ -230,7 +230,6 @@ class BenchmarkORCA:
             print("Reference was not set. Finishing.")
 
         reference = self.get_reference_calculator(
-            profile,
             **calculator_kwargs,
         )
         result = safe_calculate(

@@ -9,11 +9,13 @@ from orca_benchmarker.benchmark_functionals import BenchmarkFunctionals
 if __name__ == "__main__":
     trimer_benchmarks = BenchmarkFunctionals.from_yaml("benchmarks.yaml")
 
-    use_slurm = False
+    use_slurm = True
     slurm_script_path = "calc.sh"
 
     trimer_path = Path(os.path.dirname(__file__)) / "optimization.traj"
     trimer = read(trimer_path, index=-1)
+
+    # Run the benchmarks
     trimer_benchmarks.run(
         trimer,
         profile=OrcaProfile("/opt/orca-6.1.0/orca"),
@@ -22,8 +24,10 @@ if __name__ == "__main__":
         slurm_script_path=slurm_script_path,
     )
 
+    # Wait until all calculations are done.
     trimer_benchmarks.wait()
 
+    # Get the Results
     benchmark_results, reference_result = trimer_benchmarks.read_results(
         directory="results"
     )

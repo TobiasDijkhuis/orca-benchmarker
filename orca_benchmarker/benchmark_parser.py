@@ -1,31 +1,26 @@
 from __future__ import annotations
-from typing import Union, Optional
-from pathlib import Path
 
-from ase.atoms import Atoms
-from ase.io import read
+import os
+import re
+from copy import deepcopy
+from pathlib import Path
+from shutil import copyfile
+from subprocess import CalledProcessError, run
+from time import perf_counter, sleep
+from typing import Optional, Union
+
 import ase.units as units
-from ase.io.orca import read_orca_output
-from ase.io import ParseError
+import yaml
+from ase.atoms import Atoms
 from ase.calculators.calculator import PropertyNotImplementedError
 from ase.calculators.orca import ORCA, OrcaProfile
-from subprocess import CalledProcessError, run
-import os
-from copy import deepcopy
-from time import perf_counter
-import yaml
-from shutil import copyfile
-from time import sleep
-import re
+from ase.io import ParseError, read
+from ase.io.orca import read_orca_output
 
-from .utils import (
-    get_job_state,
-    wait_until_job_done,
-    safe_calculate,
-    slurm_calculator,
-    replace_brackets_parenthesis_by_lowercase,
-)
 from .result import Result
+from .utils import (convert_benchmark_to_dir, get_job_state,
+                    replace_brackets_parenthesis_by_lowercase, safe_calculate,
+                    slurm_calculator, wait_until_job_done)
 
 _implement_child_string = "To be implemented by child class"
 
@@ -47,6 +42,15 @@ class BenchmarkORCA:
             self._check_configuration_key(key)
 
         self.benchmarks = benchmarks
+        self.benchmark_dirs = [
+            convert_benchmark_to_dir(benchmark) for benchmark in self.benchmarks
+        ]
+
+        self.reference_dir = convert_benchmark_to_dir(
+            self.config["reference"], reference=True
+        )
+
+        self.job_ids = []
 
         self.energies = []
         self.forces = []
@@ -58,7 +62,7 @@ class BenchmarkORCA:
         filepath: str | Path,
         valid_configuration_keys: list[str],
         comment: str = "#",
-    ):
+    ) -> BenchmarkORCA:
         benchmarks = []
         config = {}
 
@@ -84,7 +88,9 @@ class BenchmarkORCA:
         return cls(benchmarks, config, valid_configuration_keys)
 
     @classmethod
-    def from_yaml(cls, filepath: str | Path, valid_configuration_keys: list[str]):
+    def from_yaml(
+        cls, filepath: str | Path, valid_configuration_keys: list[str]
+    ) -> BenchmarkORCA:
         with open(filepath, "r") as file:
             lines = file.readlines()
         lines = "\n".join(lines)
@@ -121,9 +127,7 @@ class BenchmarkORCA:
     def get_valid_configuration_keys(self) -> list[str]:
         return self.valid_configuration_keys
 
-    def get_total_orcablocks(
-        self, orcablocks: str | list[str] | None = None, use_slurm: bool = False
-    ) -> str:
+    def get_total_orcablocks(self, orcablocks: str | list[str] | None = None) -> str:
         if isinstance(orcablocks, str):
             orcablocks = [orcablocks]
         if orcablocks is None:
@@ -140,7 +144,7 @@ class BenchmarkORCA:
             orcablocks += config_orcablocks
         orcablocks = "\n".join(orcablocks)
 
-        if not use_slurm:
+        if not self.use_slurm:
             return orcablocks
 
         # Substitute the amount of cores in the ORCA input file
@@ -151,31 +155,22 @@ class BenchmarkORCA:
 
     def get_benchmark_calculators(
         self,
-        profile: OrcaProfile,
+        profile: OrcaProfile | None = None,
         charge: int = 0,
         mult: int = 1,
         directory: Path | str = ".",
         orcablocks: str | list[str] | None = None,
-        use_slurm: bool = False,
     ) -> list[ORCA]:
         calculators = []
 
-        orcablocks = self.get_total_orcablocks(orcablocks, use_slurm=use_slurm)
+        orcablocks = self.get_total_orcablocks(orcablocks)
         simpleinputs = self.get_ase_simpleinputs(self.benchmarks)
         for i, benchmark in enumerate(self.benchmarks):
-            benchmark_dir = Path(directory) / benchmark.replace(" ", "_").replace(
-                "/", ""
-            )
-
-            benchmark_dir = Path(
-                replace_brackets_parenthesis_by_lowercase(str(benchmark_dir))
-            )
-
             calculator = ORCA(
                 orcasimpleinput=simpleinputs[i],
                 orcablocks=orcablocks,
                 profile=profile,
-                directory=benchmark_dir,
+                directory=Path(directory) / self.benchmark_dirs[i],
                 charge=charge,
                 mult=mult,
             )
@@ -189,23 +184,15 @@ class BenchmarkORCA:
         mult: int = 1,
         directory: Path | str = ".",
         orcablocks: str = "",
-        use_slurm: bool = False,
     ) -> ORCA:
         simpleinput = self.get_ase_simpleinputs(self.config["reference"])
 
-        rel_path = "reference_" + self.config["reference"].replace(" ", "_").replace(
-            "/", ""
-        )
-
-        rel_path = Path(replace_brackets_parenthesis_by_lowercase(rel_path))
-
-        orcablocks = self.get_total_orcablocks(orcablocks, use_slurm=use_slurm)
-        reference_dir = Path(directory) / rel_path
+        orcablocks = self.get_total_orcablocks(orcablocks)
         calculator = ORCA(
             orcasimpleinput=simpleinput,
             orcablocks=orcablocks,
             profile=profile,
-            directory=reference_dir,
+            directory=Path(directory) / self.reference_dir,
             charge=charge,
             mult=mult,
         )
@@ -214,7 +201,7 @@ class BenchmarkORCA:
     def run(
         self,
         atoms: Atoms,
-        profile: OrcaProfile,
+        profile: OrcaProfile | None = None,
         charge: int = 0,
         mult: int = 1,
         directory: Path | str = ".",
@@ -223,21 +210,22 @@ class BenchmarkORCA:
         use_slurm: bool = False,
         slurm_script_path: str | Path | None = None,
     ):
+        self.use_slurm = use_slurm
+
         calculator_kwargs = {
             "charge": charge,
             "mult": mult,
             "directory": directory,
             "orcablocks": orcablocks,
-            "use_slurm": use_slurm,
+            "profile": profile,
         }
         calculators = self.get_benchmark_calculators(
-            profile,
             **calculator_kwargs,
         )
 
         calculate_kwargs = {
             "force": force,
-            "use_slurm": use_slurm,
+            "use_slurm": self.use_slurm,
             "slurm_script_path": slurm_script_path,
         }
         for i, calculator in enumerate(calculators):
@@ -246,9 +234,7 @@ class BenchmarkORCA:
                 atoms,
                 **calculate_kwargs,
             )
-            self.energies.append(result.energy)
-            self.forces.append(result.forces)
-            self.durations.append(result.duration)
+            self.job_ids.append(result)
 
         if not self.reference_is_set():
             print("Reference was not set. Finishing.")
@@ -262,9 +248,42 @@ class BenchmarkORCA:
             atoms,
             **calculate_kwargs,
         )
-        self.reference_energy = result.energy
-        self.reference_forces = result.forces
-        self.reference_duration = result.duration
+        self.job_ids.append(result)
+
+    def wait(self) -> None:
+        """Wait until all calculations are done. Does nothing if slurm is not being used."""
+        if not self.use_slurm:
+            return
+
+        if all([job is None for job in self.job_ids]):
+            return
+
+        jobs = [job for job in self.job_ids if job is not None]
+
+        try:
+            from slurm_manager.job import SlurmJob
+            from slurm_manager.manager import SlurmJobManager
+
+            manager = SlurmJobManager()
+            manager.add_jobs(jobs)
+            manager.wait()
+        except (ImportError, ModuleNotFoundError):
+            [wait_until_job_done(job_id) for job_id in jobs]
+
+    def read_results(self, directory: str | Path = ".") -> tuple[list[Result], Result]:
+        """Get all results"""
+        benchmark_results = []
+        for benchmark_dir in self.benchmark_dirs:
+            benchmark_results.append(
+                Result.from_orca_output_file(
+                    Path(directory) / benchmark_dir / "orca.out"
+                )
+            )
+
+        reference_result = Result.from_orca_output_file(
+            Path(directory) / self.reference_dir / "orca.out"
+        )
+        return benchmark_results, reference_result
 
     def get_energy_deviations(self) -> list[float]:
         if not self.energies:
@@ -304,13 +323,17 @@ class BenchmarkFunctionals(BenchmarkORCA):
         self._add_basis_sets()
 
     @classmethod
-    def from_BenchmarkORCA(cls, benchmark_orca_instance: BenchmarkORCA):
+    def from_BenchmarkORCA(
+        cls, benchmark_orca_instance: BenchmarkORCA
+    ) -> BenchmarkFunctionals:
         benchmarks = benchmark_orca_instance.benchmarks
         config = benchmark_orca_instance.config
         return cls(benchmarks, config)
 
     @classmethod
-    def from_file(cls, filepath: Union[str, Path], comment: str = "#"):
+    def from_file(
+        cls, filepath: Union[str, Path], comment: str = "#"
+    ) -> BenchmarkFunctionals:
         benchmark_orca_instance = BenchmarkORCA.from_file(
             filepath,
             BenchmarkFunctionals.valid_configuration_keys,
@@ -319,7 +342,7 @@ class BenchmarkFunctionals(BenchmarkORCA):
         return cls.from_BenchmarkORCA(benchmark_orca_instance)
 
     @classmethod
-    def from_yaml(cls, filepath: str | Path):
+    def from_yaml(cls, filepath: str | Path) -> BenchmarkFunctionals:
         benchmark_orca_instance = BenchmarkORCA.from_yaml(
             filepath, BenchmarkFunctionals.valid_configuration_keys
         )

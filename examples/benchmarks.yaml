@@ -10,7 +10,7 @@ config:
   Grid: DEFGRID3
   orcablocks:
     - pal nprocs 8 end
-    - "scf\n  convergence Tight \n  guess PModel\nend"
+    - "scf\n  convergence Tight\n  guess PModel\nend"
     - output PrintLevel small end
   Parameters:
     - energy

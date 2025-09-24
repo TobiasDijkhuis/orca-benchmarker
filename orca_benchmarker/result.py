@@ -1,10 +1,11 @@
 from __future__ import annotations
+
+from dataclasses import dataclass
 from pathlib import Path
 
-from ase.io.orca import read_orca_output
-from ase.io import ParseError
 from ase.calculators.calculator import PropertyNotImplementedError
-from dataclasses import dataclass
+from ase.io import ParseError
+from ase.io.orca import read_orca_output
 
 
 @dataclass

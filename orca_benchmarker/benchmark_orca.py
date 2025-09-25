@@ -201,6 +201,7 @@ class BenchmarkORCA:
         slurm_script_path: str | Path | None = None,
     ):
         self.use_slurm = use_slurm
+        self.directory = directory
 
         calculator_kwargs = {
             "charge": charge,
@@ -244,25 +245,32 @@ class BenchmarkORCA:
         if not self.use_slurm:
             return
 
-        if all([job is None for job in self.job_ids]):
-            return
-
         jobs = [job for job in self.job_ids if job is not None]
+
+        if not jobs:
+            # If there are no jobs to wait on
+            return
 
         try:
             from slurm_manager.job import SlurmJob
             from slurm_manager.manager import SlurmJobManager
 
-            manager = SlurmJobManager()
-            manager.add_jobs(jobs)
+            manager = SlurmJobManager(jobs)
             manager.wait()
         except (ImportError, ModuleNotFoundError):
             [wait_until_job_done(job_id) for job_id in jobs]
 
     def read_results(
-        self, directory: str | Path = "."
+        self, directory: str | Path | None
     ) -> tuple[list[Result], Result | None]:
         """Get all results"""
+
+        if directory is None:
+            if hasattr(self, "directory"):
+                directory = self.directory
+            else:
+                raise ValueError()
+
         benchmark_results = []
         for benchmark_dir in self.benchmark_dirs:
             benchmark_results.append(

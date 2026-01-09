@@ -11,6 +11,7 @@ class BenchmarkFunctionals(BenchmarkORCA):
         "orcablocks",
         "grid",
         "parameters",
+        "dlpno",
     ]
 
     def __init__(self, benchmarks: list[str], config: dict):
@@ -69,13 +70,20 @@ class BenchmarkFunctionals(BenchmarkORCA):
                 simpleinput += " Energy"
             else:
                 raise ValueError(self.config["parameters"])
+
+            if "dlpno" in self.config and "pno" in benchmarks.lower():
+                simpleinput += " " + self.config["dlpno"]
             return simpleinput
         else:
             raise ValueError()
 
     def _add_basis_sets(self) -> None:
         for i, functional in enumerate(self.benchmarks):
-            if "cc" in functional.lower():
+            functional = functional.lower()
+            if "nobasis" in functional:
+                self.benchmarks[i] = self.benchmarks[i].replace("nobasis", "")
+                continue
+            if "cc" in functional:
                 # coupled cluster
                 self.benchmarks[i] += " " + self.config["basiscc"]
             else:

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
 import yaml
 from ase.atoms import Atoms
 from ase.calculators.orca import ORCA, OrcaProfile
+from ase.calculators.calculator import all_changes, all_properties
 
-from .result import Result
-from .utils import (convert_benchmark_to_dir, safe_calculate,
-                    wait_until_job_done)
+from orca_benchmarker.io import read_orca_output, remove_finished_calculators
+from orca_benchmarker.result import Result
+from orca_benchmarker.utils import (
+    convert_benchmark_to_dir,
+    write_orca_array_submission_script,
+    create_parameters_from_calculator_list,
+    start_job,
+    remove_finished_calculators,
+    is_slurm_active,
+    get_default_orca_path,
+)
 
 _implement_child_string = "To be implemented by child class"
 
@@ -111,12 +119,6 @@ class BenchmarkORCA:
     def reference_is_set(self) -> bool:
         return "reference" in self.config
 
-    def get_config(self) -> dict:
-        return self.config
-
-    def get_valid_configuration_keys(self) -> list[str]:
-        return self.valid_configuration_keys
-
     def get_total_orcablocks(self, orcablocks: str | list[str] | None = None) -> str:
         if isinstance(orcablocks, str):
             orcablocks = [orcablocks]
@@ -132,16 +134,7 @@ class BenchmarkORCA:
                     "%" + config for config in self.config["orcablocks"]
                 ]
             orcablocks += config_orcablocks
-        orcablocks = "\n".join(orcablocks)
-
-        if not self.use_slurm:
-            return orcablocks
-
-        # Substitute the amount of cores in the ORCA input file
-        # by NPROCS_HERE. This is (at job submission time) replaced by the amount
-        # of cores used by the Slurm job.
-        orcablocks = re.sub("nprocs [0-9]+", "nprocs NPROCS_HERE", orcablocks)
-        return orcablocks
+        return "\n".join(orcablocks)
 
     def get_benchmark_calculators(
         self,
@@ -153,7 +146,6 @@ class BenchmarkORCA:
     ) -> list[ORCA]:
         calculators = []
 
-        orcablocks = self.get_total_orcablocks(orcablocks)
         simpleinputs = self.get_ase_simpleinputs(self.benchmarks)
         for i, benchmark in enumerate(self.benchmarks):
             calculator = ORCA(
@@ -177,7 +169,6 @@ class BenchmarkORCA:
     ) -> ORCA:
         simpleinput = self.get_ase_simpleinputs(self.config["reference"])
 
-        orcablocks = self.get_total_orcablocks(orcablocks)
         calculator = ORCA(
             orcasimpleinput=simpleinput,
             orcablocks=orcablocks,
@@ -191,74 +182,81 @@ class BenchmarkORCA:
     def run(
         self,
         atoms: Atoms,
-        profile: OrcaProfile | None = None,
         charge: int = 0,
         mult: int = 1,
         directory: Path | str = ".",
         orcablocks: str | list[str] | None = None,
         force: bool = False,
-        use_slurm: bool = False,
-        slurm_script_path: str | Path | None = None,
+        orca_path: str | Path | None = None,
     ):
-        self.use_slurm = use_slurm
-        self.directory = directory
+        self.directory = Path(directory)
+        if not self.directory.is_dir():
+            self.directory.mkdir(parents=True)
+
+        if orca_path is None:
+            orca_path = get_default_orca_path()
+            if orca_path is None:
+                raise ValueError(
+                    "Orca path was not set in ASE configuration, but was also not passed to BenchmarkORCA.run()"
+                )
+
+        orcablocks = self.get_total_orcablocks(orcablocks)
+
+        if is_slurm_active():
+            # Substitute the amount of cores in the ORCA input file
+            # by NPROCS_HERE. This is (at job submission time) replaced by the amount
+            # of cores used by the Slurm job.
+            match = re.search("nprocs ([0-9]+)", orcablocks, flags=re.IGNORECASE)
+            if match:
+                ncores = int(match.group(1))
+                orcablocks = re.sub(
+                    "nprocs [0-9]+",
+                    "nprocs NPROCS_HERE",
+                    orcablocks,
+                    flags=re.IGNORECASE,
+                )
+            else:
+                ncores = 1
 
         calculator_kwargs = {
             "charge": charge,
             "mult": mult,
-            "directory": directory,
+            "directory": self.directory,
             "orcablocks": orcablocks,
-            "profile": profile,
+            "profile": OrcaProfile(orca_path),
         }
         calculators = self.get_benchmark_calculators(
             **calculator_kwargs,
         )
 
-        calculate_kwargs = {
-            "force": force,
-            "use_slurm": self.use_slurm,
-            "slurm_script_path": slurm_script_path,
-        }
-        for i, calculator in enumerate(calculators):
-            result = safe_calculate(
-                calculator,
-                atoms,
-                **calculate_kwargs,
+        if self.reference_is_set():
+            # Insert at 0 position, to start the reference calculation first.
+            # That will take the longest, so we have to wait the least.
+            calculators.insert(0, self.get_reference_calculator(**calculator_kwargs))
+
+        if not force:
+            calculators = remove_finished_calculators(calculators)
+
+        if not calculators:
+            return
+
+        if is_slurm_active():
+            parameter_file = self.directory / "directories.txt"
+            submission_file = self.directory / "run.sh"
+            create_parameters_from_calculator_list(
+                calculators, atoms, parameter_file=parameter_file
             )
-            self.job_ids.append(result)
-
-        if not self.reference_is_set():
-            print("Reference was not set. Finishing.")
-
-        reference = self.get_reference_calculator(
-            **calculator_kwargs,
-        )
-        result = safe_calculate(
-            reference,
-            atoms,
-            **calculate_kwargs,
-        )
-        self.job_ids.append(result)
-
-    def wait(self) -> None:
-        """Wait until all calculations are done. Does nothing if slurm is not being used."""
-        if not self.use_slurm:
-            return
-
-        jobs = [job for job in self.job_ids if job is not None]
-
-        if not jobs:
-            # If there are no jobs to wait on
-            return
-
-        try:
-            from slurm_manager.job import SlurmJob
-            from slurm_manager.manager import SlurmJobManager
-
-            manager = SlurmJobManager(jobs)
-            manager.wait()
-        except (ImportError, ModuleNotFoundError):
-            [wait_until_job_done(job_id) for job_id in jobs]
+            # sbatch_kwargs["ntasks-per-node"] = ncores
+            write_orca_array_submission_script(
+                parameter_file=parameter_file,
+                output_file=submission_file,
+                sbatch_kwargs={"ntasks-per-node": ncores},
+                orca_path=orca_path,
+            )
+            start_job(submission_file, wait_until_done=True)
+        else:
+            for i, calculator in enumerate(calculators):
+                calculator.calculate(atoms, all_properties, all_changes)
 
     def read_results(
         self, directory: str | Path | None
@@ -274,33 +272,13 @@ class BenchmarkORCA:
         benchmark_results = []
         for benchmark_dir in self.benchmark_dirs:
             benchmark_results.append(
-                Result.from_orca_output_file(
-                    Path(directory) / benchmark_dir / "orca.out"
-                )
+                read_orca_output(Path(directory) / benchmark_dir / "orca.out")
             )
 
         if not self.reference_is_set():
             return benchmark_results, None
 
-        reference_result = Result.from_orca_output_file(
+        reference_result = read_orca_output(
             Path(directory) / self.reference_dir / "orca.out"
         )
         return benchmark_results, reference_result
-
-    def get_energy_deviations(self) -> list[float]:
-        if not self.energies:
-            raise ValueError(
-                "Energy list was empty. Execute BenchmarkORCA.run() first."
-            )
-        if not self.reference_is_set():
-            raise ValueError(
-                "Reference was not set in configuration. Cannot calculate relative energies."
-            )
-        if self.reference_energy is None:
-            raise ValueError(
-                "Reference energy is None. Something was wrong with its input."
-            )
-        return [
-            energy - self.reference_energy if energy is not None else None
-            for energy in self.energies
-        ]

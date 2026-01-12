@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .benchmark_orca import BenchmarkORCA
+from pathlib import Path
 
 
 class BenchmarkFunctionals(BenchmarkORCA):
@@ -32,7 +33,7 @@ class BenchmarkFunctionals(BenchmarkORCA):
 
     @classmethod
     def from_file(
-        cls, filepath: Union[str, Path], comment: str = "#"
+        cls, filepath: str | Path, comment: str = "#"
     ) -> BenchmarkFunctionals:
         benchmark_orca_instance = BenchmarkORCA.from_file(
             filepath,

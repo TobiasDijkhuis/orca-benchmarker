@@ -1,0 +1,6 @@
+[project]
+version = "0.0.0"
+name = "orca_benchmarker"
+
+[project.scripts]
+orca_tools = "orca_benchmarker.cli:app"

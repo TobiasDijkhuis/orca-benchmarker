@@ -8,3 +8,7 @@ dependencies = [
     "ase>=3.27.0",
     "typer>=0.21.1",
 ]
+
+[project.scripts]
+orca_tools = "orca_benchmarker.cli:app"
+

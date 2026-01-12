@@ -16,16 +16,4 @@ def traj(filepath: Path) -> None:
 @app.command()
 def result(filepath: Path) -> None:
     """Print some information about an ORCA calculation"""
-    result = read_orca_output(filepath)
-    print(f"\tCompleted: {result.info.completed}")
-    print(f"\tEnergy: {result.energy:.2f} eV")
-
-    if result.frequencies is None:
-        return
-    print(f"\tZero-point energy: {result.zero_point_energy:.2f} eV")
-    print(f"\tZP-corrected energy: {result.zero_point_corrected_energy:.2f} eV")
-
-    if result.imaginary_frequency is None:
-        return
-    print(f"\tImaginary frequency: {result.imaginary_frequency:.2f} cm-1")
-    print(f"\tCross-over temperature: {result.get_crossover_temperature():.2f} K")
+    read_orca_output(filepath).print_summary()

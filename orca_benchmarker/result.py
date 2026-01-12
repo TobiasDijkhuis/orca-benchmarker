@@ -100,3 +100,19 @@ class Result:
             raise NotImplementedError(
                 f"Method of calculating crossover temperature '{method}' is not implemented. Options are: ['standard', 'fermann']"
             )
+
+    def print_summary(self) -> None:
+        print(f"\tCompleted: {self.info.completed}")
+        if not self.completed:
+            return
+        print(f"\tEnergy: {self.energy:.2f} eV")
+
+        if self.frequencies is None:
+            return
+        print(f"\tZero-point energy: {self.zero_point_energy:.2f} eV")
+        print(f"\tZP-corrected energy: {self.zero_point_corrected_energy:.2f} eV")
+
+        if self.imaginary_frequency is None:
+            return
+        print(f"\tImaginary frequency: {self.imaginary_frequency:.2f} cm-1")
+        print(f"\tCross-over temperature: {self.get_crossover_temperature():.2f} K")

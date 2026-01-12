@@ -7,15 +7,17 @@ import yaml
 from ase.atoms import Atoms
 from ase.calculators.orca import ORCA, OrcaProfile
 from ase.calculators.calculator import all_changes, all_properties
-
-from orca_benchmarker.io import read_orca_output, remove_finished_calculators
+from typing import Any
+from orca_benchmarker.io import (
+    read_orca_output,
+    write_orca_array_submission_script,
+    create_parameters_from_calculator_list,
+    remove_finished_calculators,
+)
 from orca_benchmarker.result import Result
 from orca_benchmarker.utils import (
     convert_benchmark_to_dir,
-    write_orca_array_submission_script,
-    create_parameters_from_calculator_list,
     start_job,
-    remove_finished_calculators,
     is_slurm_active,
     get_default_orca_path,
 )
@@ -188,6 +190,8 @@ class BenchmarkORCA:
         orcablocks: str | list[str] | None = None,
         force: bool = False,
         orca_path: str | Path | None = None,
+        sbatch_kwargs: dict[str, Any] | None = None,
+        module_info: str | list[str] | None = None,
     ):
         self.directory = Path(directory)
         if not self.directory.is_dir():
@@ -246,12 +250,15 @@ class BenchmarkORCA:
             create_parameters_from_calculator_list(
                 calculators, atoms, parameter_file=parameter_file
             )
-            # sbatch_kwargs["ntasks-per-node"] = ncores
+            if sbatch_kwargs is None:
+                sbatch_kwargs = {}
+            sbatch_kwargs["ntasks-per-node"] = ncores
             write_orca_array_submission_script(
                 parameter_file=parameter_file,
                 output_file=submission_file,
-                sbatch_kwargs={"ntasks-per-node": ncores},
+                sbatch_kwargs=sbatch_kwargs,
                 orca_path=orca_path,
+                module_info=module_info,
             )
             start_job(submission_file, wait_until_done=True)
         else:

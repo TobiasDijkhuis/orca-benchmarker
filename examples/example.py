@@ -17,6 +17,8 @@ if __name__ == "__main__":
         directory="results",
         charge=0,
         mult=1,
+        sbatch_kwargs={"time": "20:00", "partition": "cpu-short"},
+        module_info=["purge", "load ALICE/default", "load OpenMPI/4.1.6-GCC-13.2.0"],
     )
 
     # Get the Results

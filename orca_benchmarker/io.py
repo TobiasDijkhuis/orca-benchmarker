@@ -49,6 +49,7 @@ def write_orca_array_submission_script(
     output_file: str | Path = "run.sh",
     sbatch_kwargs: dict[str, Any] | None = None,
     orca_path: str | Path = "orca",
+    module_info: str | list[str] | None = None,
 ) -> None:
     num_jobs_in_array = sum(1 for _ in open(parameter_file))
 
@@ -57,20 +58,29 @@ def write_orca_array_submission_script(
         if sbatch_kwargs is not None:
             for key, value in sbatch_kwargs.items():
                 file.write(f"#SBATCH --{key}={value}\n")
+        file.write("#SBATCH --nodes=1\n")
+        file.write("#SBATCH --cpus-per-task=1\n")
+        file.write("#SBATCH --threads-per-core=1\n\n")
+        file.write(f"#SBATCH --array=1-{num_jobs_in_array}\n\n")
+
+        if module_info is not None:
+            if isinstance(module_info, str):
+                module_info = [module_info]
+            for step in module_info:
+                file.write(f"module {step}\n")
 
         file.write(
             dedent(f"""
-                #SBATCH --array=1-{num_jobs_in_array}
 
                 calculation_dirs_file={parameter_file}
                 calculation_dir=$(sed "${{SLURM_ARRAY_TASK_ID}}q;d" $calculation_dirs_file)
                 calculation_dir=$(realpath $calculation_dir)
-
+            
                 # Replace NPROCS_HERE by the amount of tasks per node.
                 sed -i -e "s/NPROCS_HERE/${{SLURM_NTASKS_PER_NODE}}/g" ${{calculation_dir}}/orca.inp
                 
                 # Always run stuff in local scratch on node for job and not in ${{HOME}} to avoid NFS network slowness
-                scratch_dir="/scratch/${{SLURM_JOB_USER}}/${{SLURM_JOB_ID}}"
+                scratch_dir=$SCRATCH
                 cd $scratch_dir
                 
                 # ORCA has the tendency to put temporary files in the same directory as the input file,

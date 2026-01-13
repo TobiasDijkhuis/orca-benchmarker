@@ -26,7 +26,7 @@ class ResultInfo:
             lines = file.readlines()
         for line in lines[::-1]:
             if "Sum of individual times" in line:
-                return float(line.split("...").split()[0])
+                return float(line.split("...")[1].split()[0])
 
 
 @dataclass

@@ -1,16 +1,16 @@
-from ase import Atoms
-from ase.calculators.singlepoint import SinglePointCalculator
-from ase.calculators.calculator import all_properties
-from ase.units import Hartree, Bohr
-from orca_benchmarker.result import Result, ResultInfo
+from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import numpy as np
-from pathlib import Path
-from textwrap import dedent
-
-from orca_benchmarker.utils import check_type
+from ase import Atoms
+from ase.calculators.calculator import all_properties
 from ase.calculators.orca import ORCA
+from ase.calculators.singlepoint import SinglePointCalculator
+from ase.units import Bohr, Hartree
+
+from orca_benchmarker.result import Result, ResultInfo
+from orca_benchmarker.utils import check_type
 
 
 def read_orca_generated_trajectory(trajectory_path: str | Path) -> list[Atoms]:
@@ -150,7 +150,9 @@ def create_parameters_from_atoms_list(
     base_directory = Path(calculator.directory.resolve().as_posix())
     with open(parameter_file, "w") as file:
         for atoms_idx, atoms in enumerate(atoms_list):
-            calculator.directory = base_directory / str(atoms_idx)
+            # Start from index 1 instead of 0 to have slurm array task ids
+            # and directories line up.
+            calculator.directory = base_directory / str(atoms_idx + 1)
             calculator.write_inputfiles(atoms, all_properties)
             file.write(f"{calculator.directory.resolve().as_posix()}\n")
 

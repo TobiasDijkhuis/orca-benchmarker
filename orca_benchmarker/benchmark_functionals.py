@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from .benchmark_orca import BenchmarkORCA
 from pathlib import Path
+
+from .benchmark_orca import BenchmarkORCA
 
 
 class BenchmarkFunctionals(BenchmarkORCA):

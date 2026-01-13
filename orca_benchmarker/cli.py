@@ -1,7 +1,9 @@
-import typer
-from orca_benchmarker.io import read_orca_generated_trajectory, read_orca_output
-from ase.visualize import view
 from pathlib import Path
+
+import typer
+from ase.visualize import view
+
+from orca_benchmarker.io import read_orca_generated_trajectory, read_orca_output
 
 app = typer.Typer()
 

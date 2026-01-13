@@ -2,24 +2,25 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 from ase.atoms import Atoms
-from ase.calculators.orca import ORCA, OrcaProfile
 from ase.calculators.calculator import all_changes, all_properties
-from typing import Any
+from ase.calculators.orca import ORCA, OrcaProfile
+
 from orca_benchmarker.io import (
-    read_orca_output,
-    write_orca_array_submission_script,
     create_parameters_from_calculator_list,
+    read_orca_output,
     remove_finished_calculators,
+    write_orca_array_submission_script,
 )
 from orca_benchmarker.result import Result
 from orca_benchmarker.utils import (
     convert_benchmark_to_dir,
-    start_job,
-    is_slurm_active,
     get_default_orca_path,
+    is_slurm_active,
+    start_job,
 )
 
 _implement_child_string = "To be implemented by child class"

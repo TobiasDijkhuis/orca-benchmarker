@@ -1,13 +1,11 @@
+import os
 import re
 from pathlib import Path
 from subprocess import run
+from typing import Any, Type
 
 from ase.calculators.calculator import BadConfiguration
 from ase.calculators.orca import ORCA
-
-from typing import Any, Type
-import os
-
 
 # def get_job_state(job_id: int | str) -> str:
 #     command = f"sacct --noheader --jobs {job_id} --format=jobid,state"

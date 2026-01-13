@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-
 from functools import cached_property
-import numpy as np
-from orca_benchmarker.constants import eV_per_reciprocal_cm
-from scipy.constants import speed_of_light, centi, pi, Boltzmann, hbar
 from math import log
-
+from pathlib import Path
 from typing import Literal
+
+import numpy as np
+from scipy.constants import Boltzmann, centi, hbar, pi, speed_of_light
+
+from orca_benchmarker.constants import eV_per_reciprocal_cm
 
 
 @dataclass

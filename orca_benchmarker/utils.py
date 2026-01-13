@@ -6,6 +6,7 @@ from ase.calculators.calculator import BadConfiguration
 from ase.calculators.orca import ORCA
 
 from typing import Any, Type
+import os
 
 
 # def get_job_state(job_id: int | str) -> str:
@@ -155,10 +156,14 @@ def convert_benchmark_to_dir(benchmark: str, reference=False) -> Path:
 def start_job(
     submission_script_path: str | Path, wait_until_done: bool = False
 ) -> None:
-    command = f"sbatch {submission_script_path}".split()
+    wd = os.getcwd()
+    directory = Path(submission_script_path).parents[0]
+    command = f"sbatch {submission_script_path.parts[-1]}".split()
     if wait_until_done:
         command.insert(1, "--wait")
+    os.chdir(directory)
     run(command)
+    os.chdir(wd)
 
 
 def is_slurm_active() -> bool:

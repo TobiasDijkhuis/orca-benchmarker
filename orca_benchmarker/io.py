@@ -49,7 +49,7 @@ def write_orca_array_submission_script(
     output_file: str | Path = "run.sh",
     sbatch_kwargs: dict[str, Any] | None = None,
     orca_path: str | Path = "orca",
-    module_info: str | list[str] | None = None,
+    environment_commands: str | list[str] | None = None,
 ) -> None:
     num_jobs_in_array = sum(1 for _ in open(parameter_file))
 
@@ -63,16 +63,18 @@ def write_orca_array_submission_script(
         file.write("#SBATCH --threads-per-core=1\n\n")
         file.write(f"#SBATCH --array=1-{num_jobs_in_array}\n\n")
 
-        if module_info is not None:
-            if isinstance(module_info, str):
-                module_info = [module_info]
-            for step in module_info:
-                file.write(f"module {step}\n")
+        if environment_commands is not None:
+            if isinstance(environment_commands, str):
+                environment_commands = [environment_commands]
+            check_type("environment_commands", environment_commands, list)
+            for environment_command in environment_commands:
+                check_type("environment_command", environment_command, str)
+                file.write(f"{environment_command}\n")
 
         file.write(
             dedent(f"""
 
-                calculation_dirs_file={parameter_file}
+                calculation_dirs_file={parameter_file.resolve().as_posix()}
                 calculation_dir=$(sed "${{SLURM_ARRAY_TASK_ID}}q;d" $calculation_dirs_file)
                 calculation_dir=$(realpath $calculation_dir)
             
@@ -97,6 +99,8 @@ def write_orca_array_submission_script(
                 # Remove unnecessary stuff
                 rm orca.densities*
                 rm orca.gbw
+                rm orca.bibtex
+                rm orca.property.txt
 
                 # Copy relevant things to calculation directory
                 cp orca.* ${{calculation_dir}}/.
@@ -124,7 +128,7 @@ def create_parameters_from_calculator_list(
     with open(parameter_file, "w") as file:
         for calculator_idx, calculator in enumerate(calculator_list):
             calculator.write_inputfiles(atoms, all_properties)
-            file.write(f"{calculator.directory}\n")
+            file.write(f"{calculator.directory.resolve().as_posix()}\n")
 
 
 def create_parameters_from_atoms_list(
@@ -143,12 +147,12 @@ def create_parameters_from_atoms_list(
     for atoms in atoms_list:
         check_type("atoms", atoms, Atoms)
 
-    base_directory = Path(calculator.directory)
+    base_directory = Path(calculator.directory.resolve().as_posix())
     with open(parameter_file, "w") as file:
         for atoms_idx, atoms in enumerate(atoms_list):
             calculator.directory = base_directory / str(atoms_idx)
             calculator.write_inputfiles(atoms, all_properties)
-            file.write(f"{calculator.directory}\n")
+            file.write(f"{calculator.directory.resolve().as_posix()}\n")
 
 
 def remove_finished_calculators(calculators: list[ORCA]) -> list[ORCA]:

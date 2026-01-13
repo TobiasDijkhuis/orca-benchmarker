@@ -191,7 +191,7 @@ class BenchmarkORCA:
         force: bool = False,
         orca_path: str | Path | None = None,
         sbatch_kwargs: dict[str, Any] | None = None,
-        module_info: str | list[str] | None = None,
+        environment_commands: str | list[str] | None = None,
     ):
         self.directory = Path(directory)
         if not self.directory.is_dir():
@@ -256,9 +256,9 @@ class BenchmarkORCA:
             write_orca_array_submission_script(
                 parameter_file=parameter_file,
                 output_file=submission_file,
-                sbatch_kwargs=sbatch_kwargs,
                 orca_path=orca_path,
-                module_info=module_info,
+                sbatch_kwargs=sbatch_kwargs,
+                environment_commands=environment_commands,
             )
             start_job(submission_file, wait_until_done=True)
         else:

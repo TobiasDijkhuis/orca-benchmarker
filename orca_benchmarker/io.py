@@ -204,7 +204,7 @@ def read_orca_output(filepath: str | Path) -> Result:
                     [float(val) for val in grad_line.split()[3:]]
                     for grad_line in lines[nlines - i + 2 : nlines - i + 2 + n_atoms]
                 ],
-            ) * (Hartree / Bohr)
+            ) * (-Hartree / Bohr)
             break
 
     frequencies = None

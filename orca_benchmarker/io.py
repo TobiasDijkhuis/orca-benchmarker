@@ -9,7 +9,7 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.units import Bohr, Hartree
 
 from orca_benchmarker.result import Result, ResultInfo
-from orca_benchmarker.utils import check_type
+from orca_benchmarker.utils import check_type, get_orca_path
 
 
 def read_orca_generated_trajectory(trajectory_path: str | Path) -> list[Atoms]:
@@ -79,6 +79,7 @@ def write_orca_array_submission_script(
 
             Default = None
     """
+    orca_path = get_orca_path(orca_path)
 
     num_jobs_in_array = sum(1 for _ in open(parameter_file))
 
@@ -201,10 +202,40 @@ def remove_finished_calculators(calculators: list[ORCA]) -> list[ORCA]:
         if not output_file.is_file():
             to_keep.append(i)
             continue
+
         result = read_orca_output(output_file)
         if not result.info.completed:
             to_keep.append(i)
     return [calculators[i] for i in to_keep]
+
+
+def remove_finished_atoms(calculator: ORCA, atoms_list: list[Atoms]) -> list[Atoms]:
+    """Remove Atoms instances from atoms_list that have already been calculated
+    with this calculator. The order of Atoms in atoms_list is important here,
+    as they are checked by index."""
+
+    calc_directory = calculator.directory
+    to_keep = []
+    for i, atoms in enumerate(atoms_list):
+        output_file = calc_directory / str(i + 1) / "orca.out"
+        if not output_file.is_file():
+            # Calculation not started yet
+            to_keep.append(i)
+            continue
+
+        result = read_orca_output(output_file)
+        if not result.info.completed:
+            # Calculation did not finish
+            to_keep.append(i)
+            continue
+
+        if not np.allclose(result.info.positions, atoms.positions) or not np.all(
+            result.info.symbols == atoms.symbols
+        ):
+            # Not the same structure
+            to_keep.append(i)
+            continue
+    return [atoms_list[i] for i in to_keep]
 
 
 def read_orca_output(filepath: str | Path) -> Result:

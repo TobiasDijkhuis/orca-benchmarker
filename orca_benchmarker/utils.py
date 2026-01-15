@@ -221,3 +221,22 @@ def get_orca_path(orca_path: str | Path | None) -> Path:
     raise ValueError(
         "Orca path was not set in ASE configuration, but orca_path given as kwarg was also None"
     )
+
+
+def extract_sbatch_kwargs_from_orcablocks(orcablocks) -> tuple[dict[str, str], str]:
+    """Substitute the amount of cores in the ORCA input file
+    by NPROCS_HERE. This is (at job submission time) replaced by the amount
+    of cores used by the Slurm job."""
+    match = re.search("nprocs ([0-9]+)", orcablocks, flags=re.IGNORECASE)
+    if match:
+        ncores = int(match.group(1))
+        orcablocks = re.sub(
+            "nprocs [0-9]+",
+            "nprocs NPROCS_HERE",
+            orcablocks,
+            flags=re.IGNORECASE,
+        )
+    else:
+        ncores = 1
+
+    return {"ntasks-per-node": ncores}, orcablocks

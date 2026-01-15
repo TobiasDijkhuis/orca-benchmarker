@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
+from ase import Atoms
+from ase.calculators.singlepoint import SinglePointCalculator
 from scipy.constants import Boltzmann, centi, hbar, pi, speed_of_light
 
 from orca_benchmarker.constants import eV_per_reciprocal_cm
-from ase.calculators.singlepoint import SinglePointCalculator
-from ase import Atoms
 
 
 @dataclass
@@ -38,7 +38,7 @@ class ResultInfo:
 
         nlines = len(lines)
         for i, line in enumerate(lines[::-1]):
-            if not "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+            if "CARTESIAN COORDINATES (ANGSTROEM)" not in line:
                 continue
             return np.asarray(
                 [
@@ -56,7 +56,7 @@ class ResultInfo:
 
         nlines = len(lines)
         for i, line in enumerate(lines[::-1]):
-            if not "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+            if "CARTESIAN COORDINATES (ANGSTROEM)" not in line:
                 continue
             return [
                 line.split()[0]

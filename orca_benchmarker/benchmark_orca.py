@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,7 @@ from orca_benchmarker.io import (
 from orca_benchmarker.result import Result
 from orca_benchmarker.utils import (
     convert_benchmark_to_dir,
+    extract_sbatch_kwargs_from_orcablocks,
     get_orca_path,
     is_slurm_active,
     start_job,
@@ -195,20 +195,13 @@ class BenchmarkORCA:
         orcablocks = self.get_total_orcablocks(orcablocks)
 
         if is_slurm_active():
-            # Substitute the amount of cores in the ORCA input file
-            # by NPROCS_HERE. This is (at job submission time) replaced by the amount
-            # of cores used by the Slurm job.
-            match = re.search("nprocs ([0-9]+)", orcablocks, flags=re.IGNORECASE)
-            if match:
-                ncores = int(match.group(1))
-                orcablocks = re.sub(
-                    "nprocs [0-9]+",
-                    "nprocs NPROCS_HERE",
-                    orcablocks,
-                    flags=re.IGNORECASE,
-                )
+            sbatch_kwargs_from_blocks, orcablocks = (
+                extract_sbatch_kwargs_from_orcablocks(orcablocks)
+            )
+            if sbatch_kwargs is None:
+                sbatch_kwargs = sbatch_kwargs_from_blocks
             else:
-                ncores = 1
+                sbatch_kwargs.update(sbatch_kwargs_from_blocks)
 
         orca_path = get_orca_path(orca_path)
         calculator_kwargs = {
@@ -240,9 +233,6 @@ class BenchmarkORCA:
             create_parameters_from_calculator_list(
                 calculators, atoms, parameter_file=parameter_file
             )
-            if sbatch_kwargs is None:
-                sbatch_kwargs = {}
-            sbatch_kwargs["ntasks-per-node"] = ncores
             write_orca_array_submission_script(
                 parameter_file=parameter_file,
                 output_file=submission_file,

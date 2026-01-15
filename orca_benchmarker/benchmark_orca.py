@@ -18,7 +18,7 @@ from orca_benchmarker.io import (
 from orca_benchmarker.result import Result
 from orca_benchmarker.utils import (
     convert_benchmark_to_dir,
-    get_default_orca_path,
+    get_orca_path,
     is_slurm_active,
     start_job,
 )
@@ -50,12 +50,6 @@ class BenchmarkORCA:
         self.reference_dir = convert_benchmark_to_dir(
             self.config["reference"], reference=True
         )
-
-        self.job_ids = []
-
-        self.energies = []
-        self.forces = []
-        self.durations = []
 
     @classmethod
     def from_file(
@@ -198,13 +192,6 @@ class BenchmarkORCA:
         if not self.directory.is_dir():
             self.directory.mkdir(parents=True)
 
-        if orca_path is None:
-            orca_path = get_default_orca_path()
-            if orca_path is None:
-                raise ValueError(
-                    "Orca path was not set in ASE configuration, but was also not passed to BenchmarkORCA.run()"
-                )
-
         orcablocks = self.get_total_orcablocks(orcablocks)
 
         if is_slurm_active():
@@ -223,12 +210,13 @@ class BenchmarkORCA:
             else:
                 ncores = 1
 
+        orca_path = get_orca_path(orca_path)
         calculator_kwargs = {
             "charge": charge,
             "mult": mult,
             "directory": self.directory,
             "orcablocks": orcablocks,
-            "profile": OrcaProfile(orca_path),
+            "profile": OrcaProfile(orca_path.as_posix()),
         }
         calculators = self.get_benchmark_calculators(
             **calculator_kwargs,
@@ -243,6 +231,7 @@ class BenchmarkORCA:
             calculators = remove_finished_calculators(calculators)
 
         if not calculators:
+            # All calculators were finished, none left to calculate
             return
 
         if is_slurm_active():

@@ -68,10 +68,7 @@ def check_type(name: str, variable: Any, expected_type: Type[Any]) -> None:
     Args:
         name (str): name of the variable to check
         variable (Any): variable to check type
-        expected_type (Type[Any]) type for variable to be
-
-    Returns:
-        None
+        expected_type (Type[Any]): type for variable to be
 
     Raises:
         TypeError: if variable is not an instance of expected_type
@@ -141,7 +138,7 @@ def remove_libxc_from_string(string: str) -> str:
     )
 
 
-def convert_benchmark_to_dir(benchmark: str, reference=False) -> Path:
+def convert_benchmark_to_dir(benchmark: str, reference: bool = False) -> Path:
     """Converts the benchmark string to a valid directory"""
     benchmark_dir = benchmark.replace(" ", "_").replace("/", "")
     benchmark_dir = remove_libxc_from_string(benchmark_dir)
@@ -154,6 +151,17 @@ def convert_benchmark_to_dir(benchmark: str, reference=False) -> Path:
 def start_job(
     submission_script_path: str | Path, wait_until_done: bool = False
 ) -> None:
+    """Start job by running `sbatch {submission_script_path}`.
+
+    Args:
+        submission_script_path (str | Path): path to submission script file
+        wait_until_done (bool): wait until the job is done. Default: False
+
+    Notes:
+        This first changes to the submission script's directory, and then
+            changes back to the initial working directory.
+    """
+
     wd = os.getcwd()
     directory = Path(submission_script_path).parents[0]
     command = f"sbatch {submission_script_path.parts[-1]}".split()
@@ -177,9 +185,39 @@ def is_slurm_active() -> bool:
     return not command.stderr
 
 
-def get_default_orca_path() -> str | None:
-    """Get the default ORCA path from the config.ini file"""
+def get_orca_path_from_ase_configuration() -> str | None:
+    """Get the default ORCA path from the config.ini file
+
+    Returns:
+        str if `orca` `command` is defined in the ASE configuration,
+            and None if it is not."""
     try:
         return ORCA().profile.command
     except BadConfiguration:
         return None
+
+
+def get_orca_path(orca_path: str | Path | None) -> Path:
+    """Get the ORCA path, either from the argument passed to this function or
+    from the ASE configuration.
+
+    Args:
+        orca_path (str | Path | None): Path to ORCA executable
+
+    Returns:
+        Path: path to ORCA executable
+
+    Raises:
+        ValueError if both orca_path supplied to this function is None, and the
+            `orca` `command` in the ASE configuration is not defined.
+    """
+    if orca_path is not None:
+        return Path(orca_path)
+
+    orca_path = get_orca_path_from_ase_configuration()
+    if orca_path is not None:
+        return Path(orca_path)
+
+    raise ValueError(
+        "Orca path was not set in ASE configuration, but orca_path given as kwarg was also None"
+    )

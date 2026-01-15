@@ -10,12 +10,15 @@ import numpy as np
 from scipy.constants import Boltzmann, centi, hbar, pi, speed_of_light
 
 from orca_benchmarker.constants import eV_per_reciprocal_cm
+from ase.calculators.singlepoint import SinglePointCalculator
+from ase import Atoms
 
 
 @dataclass
 class ResultInfo:
     path: str | Path
     completed: bool
+    n_atoms: int | None
 
     @cached_property
     def duration(self) -> float | None:
@@ -28,11 +31,44 @@ class ResultInfo:
             if "Sum of individual times" in line:
                 return float(line.split("...")[1].split()[0])
 
+    @property
+    def positions(self) -> np.ndarray:
+        with open(self.path) as file:
+            lines = file.readlines()
+
+        nlines = len(lines)
+        for i, line in enumerate(lines[::-1]):
+            if not "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                continue
+            return np.asarray(
+                [
+                    [float(val) for val in line.split()[1:]]
+                    for line in lines[nlines - i + 1 : nlines - i + 1 + self.n_atoms]
+                ]
+            )
+
+        raise ValueError(f"Could not infer positions from output file {self.path}")
+
+    @property
+    def symbols(self) -> list[str]:
+        with open(self.path) as file:
+            lines = file.readlines()
+
+        nlines = len(lines)
+        for i, line in enumerate(lines[::-1]):
+            if not "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                continue
+            return [
+                line.split()[0]
+                for line in lines[nlines - i + 1 : nlines - i + 1 + self.n_atoms]
+            ]
+
+        raise ValueError(f"Could not infer symbols from output file {self.path}")
+
 
 @dataclass
 class Result:
     info: ResultInfo
-    n_atoms: int | None = None
     energy: float | None = None
     forces: np.ndarray | None = None
     frequencies: list | None = None
@@ -42,8 +78,6 @@ class Result:
     Attributes:
         info: ResultInfo
             information about calculation
-        n_atoms: int | None, default = None
-            Number of atoms in structure
         energy: float | None, default = None
             Single point energy in eV. None if not completed
         forces: np.ndarray | None, default = None
@@ -55,13 +89,14 @@ class Result:
     """
 
     @property
-    def zero_point_corrected_energy(self) -> float | None:
+    def zero_point_corrected_energy(self) -> float:
         return self.energy + self.zero_point_energy
 
     @property
-    def zero_point_energy(self) -> float | None:
+    def zero_point_energy(self) -> float:
+        """The zero-point-energy in eV"""
         if self.frequencies is None:
-            return None
+            raise ValueError(f"No frequencies in Result of path {self.info.path}")
         zero_point_energy = 0.0
         for freq in self.frequencies:
             if freq <= 0:
@@ -71,8 +106,11 @@ class Result:
 
     @property
     def imaginary_frequency(self) -> float | None:
+        """The imaginary frequency, if it exists, in cm-1."""
         # TODO: Check if there is only one negative frequency
         # and perhaps return more if there are multiple.
+        if self.frequencies is None:
+            raise ValueError(f"No frequencies in Result of path {self.info.path}")
         for freq in self.frequencies:
             if freq < 0:
                 return abs(freq)
@@ -81,10 +119,23 @@ class Result:
         self,
         method: Literal["standard", "fermann"] = "standard",
         barrier_height: float | None = None,
-    ) -> float | None:
+    ) -> float:
+        try:
+            imaginary_frequency = self.imaginary_frequency
+        except ValueError as e:
+            raise ValueError(
+                "Cannot determine cross-over temperature if no frequencies were calculated for this Result"
+            ) from e
+        if imaginary_frequency is None:
+            raise ValueError(
+                f"No imaginary frequency in Result of path {self.info.path}"
+            )
+
+        # Convert imaginary frequency to units of radians s-1 (angular frequency)
         imaginary_frequency = (
-            abs(self.imaginary_frequency) / centi * speed_of_light * 2.0 * pi
+            abs(imaginary_frequency) / centi * speed_of_light * 2.0 * pi
         )
+
         method = method.lower()
         if method == "standard":
             # https://iopscience.iop.org/article/10.1088/0022-3719/20/24/005
@@ -116,3 +167,21 @@ class Result:
             return
         print(f"\tImaginary frequency: {self.imaginary_frequency:.2f} cm-1")
         print(f"\tCross-over temperature: {self.get_crossover_temperature():.2f} K")
+
+    def to_ase_atoms(self) -> Atoms:
+        """Convert Result instance to ASE Atoms instance, including
+        potential energy and forces in SinglePointCalculator.
+
+        Returns:
+            atoms (Atoms): ASE Atoms instance.
+        """
+        atoms = Atoms(symbols=self.info.symbols, positions=self.info.positions)
+        if not self.info.completed:
+            return atoms
+
+        results = {"energy": self.energy}
+        if self.forces is not None:
+            results["forces"] = self.forces
+
+        atoms.calc = SinglePointCalculator(atoms, **results)
+        return atoms

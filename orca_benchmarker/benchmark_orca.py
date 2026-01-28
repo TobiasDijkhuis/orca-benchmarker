@@ -187,6 +187,8 @@ class BenchmarkORCA:
         orca_path: str | Path | None = None,
         sbatch_kwargs: dict[str, Any] | None = None,
         environment_commands: str | list[str] | None = None,
+        scratch_directory: str | Path = "$SCRATCH",
+        remove_gbw: bool = False,
     ):
         self.directory = Path(directory)
         if not self.directory.is_dir():
@@ -239,6 +241,8 @@ class BenchmarkORCA:
                 orca_path=orca_path,
                 sbatch_kwargs=sbatch_kwargs,
                 environment_commands=environment_commands,
+                remove_gbw=remove_gbw,
+                scratch_dir=scratch_directory,
             )
             start_job(submission_file, wait_until_done=True)
         else:

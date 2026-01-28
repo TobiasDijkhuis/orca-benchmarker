@@ -54,7 +54,9 @@ def write_orca_array_submission_script(
     output_file: str | Path = "run.sh",
     sbatch_kwargs: dict[str, str] | None = None,
     orca_path: str | Path | None = None,
+    remove_gbw: bool = False,
     environment_commands: str | list[str] | None = None,
+    scratch_dir: str = "$SCRATCH",
 ) -> None:
     """Write a job array submission script that runs ORCA in directories written in
     `parameter_file`.
@@ -64,11 +66,17 @@ def write_orca_array_submission_script(
         output_file (str | Path):
         sbatch_kwargs (dict[str, str] | None): keyword arguments written to the
             job submission script as "#SBATCH --{key}={value}". Default = None
-        environment_commands: (str | list[str] | None): commands written to the
+        environment_commands (str | list[str] | None): commands written to the
             job submission script to set up the environment. This is written in
             order in the list, and can be something like
             `['module purge', 'module load OpenMPI/4.1.6-GCC-0.3.2']`.
             Default = None
+        remove_gbw (bool): whether to remove the orca.gbw file to save storage.
+            Default = False
+        scratch_dir (str): scratch directory where to run the calculation.
+            Outputs are copied to the calculation directory after completion.
+            Default: `$SCRATCH`, such that Slurm evaluates it, which does not work
+            on all clusters.
         orca_path (str | Path | None): path to the `orca` executable.
             If None, the path is inferred from the ASE configuration, see
             https://ase-lib.org/ase/calculators/calculators.html#calculator-configuration
@@ -101,40 +109,40 @@ def write_orca_array_submission_script(
                 check_type("environment_command", environment_command, str)
                 file.write(f"{environment_command}\n")
 
-        file.write(
-            dedent(f"""
+        nl = "\n"
+        string = dedent(f"""
 
-                calculation_dirs_file={parameter_file.resolve().as_posix()}
-                calculation_dir=$(sed "${{SLURM_ARRAY_TASK_ID}}q;d" $calculation_dirs_file)
-                calculation_dir=$(realpath $calculation_dir)
+            calculation_dirs_file={parameter_file.resolve().as_posix()}
+            calculation_dir=$(sed "${{SLURM_ARRAY_TASK_ID}}q;d" $calculation_dirs_file)
+            calculation_dir=$(realpath $calculation_dir)
             
-                # Replace NPROCS_HERE by the amount of tasks per node.
-                sed -i -e "s/NPROCS_HERE/${{SLURM_NTASKS_PER_NODE}}/g" ${{calculation_dir}}/orca.inp
-                
-                # Always run stuff in local scratch on node for job and not in ${{HOME}} to avoid NFS network slowness
-                scratch_dir=$SCRATCH
-                cd $scratch_dir
-                
-                # ORCA has the tendency to put temporary files in the same directory as the input file,
-                # so we copy the input file from the calculation directory to the scratch directory
-                cp ${{calculation_dir}}/orca.inp orca.inp
-                
-                # Run calculation. Take input file from scratch directory, and put output there too.
-                {orca_path} orca.inp > ${{calculation_dir}}/orca.out
+            # Replace NPROCS_HERE by the amount of tasks per node.
+            sed -i -e "s/NPROCS_HERE/${{SLURM_NTASKS_PER_NODE}}/g" ${{calculation_dir}}/orca.inp
+            
+            # Always run stuff in local scratch on node for job and not in ${{HOME}} to avoid NFS network slowness
+            scratch_dir={scratch_dir}
+            cd $scratch_dir
+            
+            # ORCA has the tendency to put temporary files in the same directory as the input file,
+            # so we copy the input file from the calculation directory to the scratch directory
+            cp ${{calculation_dir}}/orca.inp orca.inp
+            
+            # Run calculation. Take input file from scratch directory, and put output there too.
+            {orca_path} orca.inp > ${{calculation_dir}}/orca.out
 
-                # Remove temporary stuff in case of a failed calculation
-                # The "-f" suppresses the error if no files matching "*tmp*" exist
-                rm -f *tmp*
+            # Remove temporary stuff in case of a failed calculation
+            # The "-f" suppresses the error if no files matching "*tmp*" exist
+            rm -f *tmp*
 
-                # Remove unnecessary stuff
-                rm orca.densities*
-                rm orca.gbw
-                rm orca.bibtex
-                rm orca.property.txt
+            # Remove unnecessary stuff
+            rm orca.densities*
+            {f"# This file was written with 'remove_gbw = False'{nl}            # " if not remove_gbw else ""}rm orca.gbw
+            rm orca.bibtex
+            rm orca.property.txt
 
-                # Copy relevant things to calculation directory
-                cp orca.* ${{calculation_dir}}/.""")
-        )
+            # Copy relevant things to calculation directory
+            cp orca.* ${{calculation_dir}}/.""")
+        file.write(string)
 
 
 def create_parameters_from_calculator_list(

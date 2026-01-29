@@ -135,8 +135,7 @@ def write_orca_array_submission_script(
             rm -f *tmp*
 
             # Remove unnecessary stuff
-            rm orca.densities*
-            {f"# This file was written with 'remove_gbw = False'{nl}            # " if not remove_gbw else ""}rm orca.gbw
+            {f"# This file was written with 'remove_gbw = False'{nl}            # " if not remove_gbw else ""}rm orca.gbw; rm orca.densities*
             rm orca.bibtex
             rm orca.property.txt
 

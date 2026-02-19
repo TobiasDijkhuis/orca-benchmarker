@@ -236,10 +236,11 @@ def remove_finished_atoms(calculator: ORCA, atoms_list: list[Atoms]) -> list[Ato
             to_keep.append(i)
             continue
 
-        if not np.allclose(result.info.positions, atoms.positions) or not np.all(
-            result.info.symbols == atoms.symbols
-        ):
+        if not np.allclose(
+            result.info.positions, atoms.positions, atol=1e-6
+        ) or not np.all(result.info.symbols == atoms.symbols):
             # Not the same structure
+            print(result.info.positions, atoms.positions)
             to_keep.append(i)
             continue
     return [atoms_list[i] for i in to_keep]

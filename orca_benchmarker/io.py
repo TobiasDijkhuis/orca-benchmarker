@@ -112,7 +112,7 @@ def write_orca_array_submission_script(
         nl = "\n"
         string = dedent(f"""
 
-            calculation_dirs_file={parameter_file.resolve().as_posix()}
+            calculation_dirs_file="{parameter_file.resolve().as_posix()}"
             calculation_dir=$(sed "${{SLURM_ARRAY_TASK_ID}}q;d" $calculation_dirs_file)
             calculation_dir=$(realpath $calculation_dir)
             
@@ -160,6 +160,10 @@ def create_parameters_from_calculator_list(
     for calculator in calculator_list:
         check_type("calculator", calculator, ORCA)
 
+    parameter_file = Path(parameter_file)
+    if not parameter_file.parent.is_dir():
+        parameter_file.parent.mkdir(parents=True)
+
     with open(parameter_file, "w") as file:
         for calculator_idx, calculator in enumerate(calculator_list):
             calculator.write_inputfiles(atoms, all_properties)
@@ -170,6 +174,8 @@ def create_parameters_from_atoms_list(
     calculator: ORCA,
     atoms_list: list[Atoms] | Atoms,
     parameter_file: str | Path = "directories.txt",
+    mult: list[int] | None = None,
+    charge: list[int] | None = None,
 ) -> None:
     if isinstance(atoms_list, Atoms):
         atoms_list = [atoms_list]
@@ -182,9 +188,39 @@ def create_parameters_from_atoms_list(
     for atoms in atoms_list:
         check_type("atoms", atoms, Atoms)
 
+    if mult is None:
+        mult = [calculator.parameters["mult"]] * len(atoms_list)
+    else:
+        # If custom multiplicities list is given, ensure that it is correct
+        check_type("mult", mult, list)
+        if not all(isinstance(multiplicity, int) for multiplicity in mult):
+            raise TypeError()
+        if not len(mult) == len(atoms_list):
+            raise ValueError()
+    if charge is None:
+        charge = [calculator.parameters["charge"]] * len(atoms_list)
+    else:
+        # If custom charges list is given, ensure that it is correct
+        check_type("charge", charge, list)
+        if not all(isinstance(structure_charge, int) for structure_charge in charge):
+            raise TypeError()
+        if not len(charge) == len(atoms_list):
+            raise ValueError()
+
+    parameter_file = Path(parameter_file)
+    if not parameter_file.parent.is_dir():
+        parameter_file.parent.mkdir(parents=True)
+
     base_directory = Path(calculator.directory.resolve().as_posix())
     with open(parameter_file, "w") as file:
-        for atoms_idx, atoms in enumerate(atoms_list):
+        for atoms_idx, (atoms, mult_in_atoms, charge_in_atoms) in enumerate(
+            zip(atoms_list, mult, charge)
+        ):
+            # Set multiplicity and charge of the calculator to
+            # the multiplicity and charge of this structure
+            calculator.parameters["mult"] = mult_in_atoms
+            calculator.parameters["charge"] = charge_in_atoms
+
             # Start from index 1 instead of 0 to have slurm array task ids
             # and directories line up.
             calculator.directory = base_directory / str(atoms_idx + 1)
@@ -236,11 +272,14 @@ def remove_finished_atoms(calculator: ORCA, atoms_list: list[Atoms]) -> list[Ato
             to_keep.append(i)
             continue
 
+        if not result.info.n_atoms == len(atoms):
+            to_keep.append(i)
+            continue
+
         if not np.allclose(
             result.info.positions, atoms.positions, atol=1e-6
         ) or not np.all(result.info.symbols == atoms.symbols):
             # Not the same structure
-            print(result.info.positions, atoms.positions)
             to_keep.append(i)
             continue
     return [atoms_list[i] for i in to_keep]

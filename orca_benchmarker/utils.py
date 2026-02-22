@@ -239,4 +239,11 @@ def extract_sbatch_kwargs_from_orcablocks(orcablocks) -> tuple[dict[str, str], s
     else:
         ncores = 1
 
-    return {"ntasks-per-node": ncores}, orcablocks
+    sbatch_kwargs_dict = {"ntasks-per-node": ncores}
+
+    match = re.search("maxcore ([0-9]+)", orcablocks, flags=re.IGNORECASE)
+    if match:
+        memory_per_core = int(match.group(1))
+        sbatch_kwargs_dict["mem"] = f"{int(memory_per_core * 4.0 / 3.0)}MB"
+
+    return sbatch_kwargs_dict, orcablocks
